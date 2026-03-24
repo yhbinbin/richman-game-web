@@ -1,0 +1,972 @@
+{
+  "width": 30,
+  "height": 14,
+  "cells": [
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 10
+      },
+      {
+        "type": "road",
+        "name": "旧城区A",
+        "price": 820,
+        "streetId": 1
+      },
+      {
+        "type": "road",
+        "name": "旧城区B",
+        "price": 820,
+        "streetId": 1
+      },
+      {
+        "type": "road",
+        "name": "旧城区C",
+        "price": 820,
+        "streetId": 1
+      },
+      {
+        "type": "road",
+        "name": "旧城区D",
+        "price": 820,
+        "streetId": 1
+      },
+      {
+        "type": "road",
+        "name": "旧城区E",
+        "price": 820,
+        "streetId": 1
+      },
+      {
+        "type": "event",
+        "name": "机会"
+      },
+      {
+        "type": "road",
+        "name": "商业街A",
+        "price": 940,
+        "streetId": 2
+      },
+      {
+        "type": "road",
+        "name": "商业街B",
+        "price": 940,
+        "streetId": 2
+      },
+      {
+        "type": "road",
+        "name": "商业街C",
+        "price": 940,
+        "streetId": 2
+      },
+      {
+        "type": "road",
+        "name": "商业街D",
+        "price": 940,
+        "streetId": 2
+      },
+      {
+        "type": "road",
+        "name": "商业街E",
+        "price": 940,
+        "streetId": 2
+      },
+      {
+        "type": "event",
+        "name": "随机事件"
+      },
+      {
+        "type": "road",
+        "name": "科技园A",
+        "price": 1060,
+        "streetId": 3
+      },
+      {
+        "type": "road",
+        "name": "科技园B",
+        "price": 1060,
+        "streetId": 3
+      },
+      {
+        "type": "road",
+        "name": "科技园C",
+        "price": 1060,
+        "streetId": 3
+      },
+      {
+        "type": "road",
+        "name": "科技园D",
+        "price": 1060,
+        "streetId": 3
+      },
+      {
+        "type": "road",
+        "name": "科技园E",
+        "price": 1060,
+        "streetId": 3
+      },
+      {
+        "type": "hospital",
+        "name": "医院"
+      },
+      {
+        "type": "road",
+        "name": "港口A",
+        "price": 1180,
+        "streetId": 4
+      },
+      {
+        "type": "road",
+        "name": "港口B",
+        "price": 1180,
+        "streetId": 4
+      },
+      {
+        "type": "road",
+        "name": "港口C",
+        "price": 1180,
+        "streetId": 4
+      },
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 10
+      },
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 10
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 50
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "金融街A",
+        "price": 1300,
+        "streetId": 5
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "风车F",
+        "price": 1900,
+        "streetId": 11
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "金融街B",
+        "price": 1300,
+        "streetId": 5
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "风车D",
+        "price": 1900,
+        "streetId": 11
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        "type": "shop",
+        "name": "卡片商店"
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "风车C",
+        "price": 1900,
+        "streetId": 11
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "金融街D",
+        "price": 1300,
+        "streetId": 6
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "风车B",
+        "price": 1900,
+        "streetId": 11
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "金融街E",
+        "price": 1300,
+        "streetId": 6
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "风车A",
+        "price": 1900,
+        "streetId": 11
+      },
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        "type": "road",
+        "name": "金融街F",
+        "price": 1300,
+        "streetId": 6
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 10
+      },
+      {
+        "type": "road",
+        "name": "高地D",
+        "price": 1780,
+        "streetId": 10
+      },
+      {
+        "type": "road",
+        "name": "高地C",
+        "price": 1780,
+        "streetId": 10
+      },
+      {
+        "type": "road",
+        "name": "高地B",
+        "price": 1780,
+        "streetId": 10
+      },
+      {
+        "type": "road",
+        "name": "高地A",
+        "price": 1780,
+        "streetId": 10
+      },
+      {
+        "type": "event",
+        "name": "抽卡"
+      },
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 30
+      },
+      {
+        "type": "road",
+        "name": "老街D",
+        "price": 1660,
+        "streetId": 9
+      },
+      {
+        "type": "road",
+        "name": "老街C",
+        "price": 1660,
+        "streetId": 9
+      },
+      {
+        "type": "road",
+        "name": "老街B",
+        "price": 1660,
+        "streetId": 9
+      },
+      {
+        "type": "road",
+        "name": "老街A",
+        "price": 1660,
+        "streetId": 9
+      },
+      {
+        "type": "event",
+        "name": "坏运"
+      },
+      {
+        "type": "shop",
+        "name": "卡片商店"
+      },
+      {
+        "type": "road",
+        "name": "湖畔D",
+        "price": 1540,
+        "streetId": 8
+      },
+      {
+        "type": "road",
+        "name": "湖畔C",
+        "price": 1540,
+        "streetId": 8
+      },
+      {
+        "type": "road",
+        "name": "湖畔B",
+        "price": 1540,
+        "streetId": 8
+      },
+      {
+        "type": "road",
+        "name": "湖畔A",
+        "price": 1540,
+        "streetId": 8
+      },
+      {
+        "type": "event",
+        "name": "好运"
+      },
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 20
+      },
+      {
+        "type": "road",
+        "name": "新区D",
+        "price": 1420,
+        "streetId": 7
+      },
+      {
+        "type": "road",
+        "name": "新区C",
+        "price": 1420,
+        "streetId": 7
+      },
+      {
+        "type": "road",
+        "name": "新区B",
+        "price": 1420,
+        "streetId": 7
+      },
+      {
+        "type": "road",
+        "name": "新区A",
+        "price": 1420,
+        "streetId": 7
+      },
+      {
+        "type": "gain_points",
+        "name": "获得点券",
+        "amount": 10
+      },
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  ],
+  "path": [
+    {
+      "x": 3,
+      "y": 3
+    },
+    {
+      "x": 4,
+      "y": 3
+    },
+    {
+      "x": 5,
+      "y": 3
+    },
+    {
+      "x": 6,
+      "y": 3
+    },
+    {
+      "x": 7,
+      "y": 3
+    },
+    {
+      "x": 8,
+      "y": 3
+    },
+    {
+      "x": 9,
+      "y": 3
+    },
+    {
+      "x": 10,
+      "y": 3
+    },
+    {
+      "x": 11,
+      "y": 3
+    },
+    {
+      "x": 12,
+      "y": 3
+    },
+    {
+      "x": 13,
+      "y": 3
+    },
+    {
+      "x": 14,
+      "y": 3
+    },
+    {
+      "x": 15,
+      "y": 3
+    },
+    {
+      "x": 16,
+      "y": 3
+    },
+    {
+      "x": 17,
+      "y": 3
+    },
+    {
+      "x": 18,
+      "y": 3
+    },
+    {
+      "x": 19,
+      "y": 3
+    },
+    {
+      "x": 20,
+      "y": 3
+    },
+    {
+      "x": 21,
+      "y": 3
+    },
+    {
+      "x": 22,
+      "y": 3
+    },
+    {
+      "x": 23,
+      "y": 3
+    },
+    {
+      "x": 24,
+      "y": 3
+    },
+    {
+      "x": 25,
+      "y": 3
+    },
+    {
+      "x": 26,
+      "y": 3
+    },
+    {
+      "x": 26,
+      "y": 4
+    },
+    {
+      "x": 26,
+      "y": 5
+    },
+    {
+      "x": 26,
+      "y": 6
+    },
+    {
+      "x": 26,
+      "y": 7
+    },
+    {
+      "x": 26,
+      "y": 8
+    },
+    {
+      "x": 26,
+      "y": 9
+    },
+    {
+      "x": 26,
+      "y": 10
+    },
+    {
+      "x": 25,
+      "y": 10
+    },
+    {
+      "x": 24,
+      "y": 10
+    },
+    {
+      "x": 23,
+      "y": 10
+    },
+    {
+      "x": 22,
+      "y": 10
+    },
+    {
+      "x": 21,
+      "y": 10
+    },
+    {
+      "x": 20,
+      "y": 10
+    },
+    {
+      "x": 19,
+      "y": 10
+    },
+    {
+      "x": 18,
+      "y": 10
+    },
+    {
+      "x": 17,
+      "y": 10
+    },
+    {
+      "x": 16,
+      "y": 10
+    },
+    {
+      "x": 15,
+      "y": 10
+    },
+    {
+      "x": 14,
+      "y": 10
+    },
+    {
+      "x": 13,
+      "y": 10
+    },
+    {
+      "x": 12,
+      "y": 10
+    },
+    {
+      "x": 11,
+      "y": 10
+    },
+    {
+      "x": 10,
+      "y": 10
+    },
+    {
+      "x": 9,
+      "y": 10
+    },
+    {
+      "x": 8,
+      "y": 10
+    },
+    {
+      "x": 7,
+      "y": 10
+    },
+    {
+      "x": 6,
+      "y": 10
+    },
+    {
+      "x": 5,
+      "y": 10
+    },
+    {
+      "x": 4,
+      "y": 10
+    },
+    {
+      "x": 3,
+      "y": 10
+    },
+    {
+      "x": 3,
+      "y": 9
+    },
+    {
+      "x": 3,
+      "y": 8
+    },
+    {
+      "x": 3,
+      "y": 7
+    },
+    {
+      "x": 3,
+      "y": 6
+    },
+    {
+      "x": 3,
+      "y": 5
+    },
+    {
+      "x": 3,
+      "y": 4
+    }
+  ]
+}
