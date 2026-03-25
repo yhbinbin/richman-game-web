@@ -559,8 +559,11 @@ export default class GameEngine extends Phaser.Scene {
 
   updateDirectionArrow(player) {
     if (!this.directionArrow) {
-      // Create a triangle polygon for arrow
-      this.directionArrow = this.add.triangle(0, 0, 0, 10, 10, 5, 0, 0, 0xff0000);
+      this.directionArrow = this.add.text(0, 0, '→', {
+        fontFamily: 'Arial',
+        fontSize: '22px',
+        color: '#ff0000',
+      }).setOrigin(0.5, 0.5);
       this.directionArrow.setDepth(120);
     }
     
@@ -573,17 +576,20 @@ export default class GameEngine extends Phaser.Scene {
     const pos = this.board.getTilePosition(player.position);
     let nextIdx = (player.position + player.direction) % this.board.tiles.length;
     if (nextIdx < 0) nextIdx += this.board.tiles.length;
-    
-    const nextPos = this.board.getTilePosition(nextIdx);
-    
-    let angle = 0;
-    if (nextPos.x > pos.x) angle = 0;
-    else if (nextPos.x < pos.x) angle = 180;
-    else if (nextPos.y > pos.y) angle = 90;
-    else if (nextPos.y < pos.y) angle = -90;
+
+    const currGrid = this.board.path[player.position];
+    const nextGrid = this.board.path[nextIdx];
+    const dx = nextGrid.x - currGrid.x;
+    const dy = nextGrid.y - currGrid.y;
+    let arrow = '→';
+    if (Math.abs(dy) > Math.abs(dx)) {
+      arrow = dy > 0 ? '↓' : '↑';
+    } else if (Math.abs(dx) > 0) {
+      arrow = dx > 0 ? '→' : '←';
+    }
 
     this.directionArrow.setPosition(pos.x + player.tokenOffset.x, pos.y + player.tokenOffset.y - 12);
-    this.directionArrow.setAngle(angle);
+    this.directionArrow.setText(arrow);
     
     this.tweens.killTweensOf(this.directionArrow);
     this.tweens.add({
@@ -851,7 +857,7 @@ export default class GameEngine extends Phaser.Scene {
       this.ui.choiceBox.setVisible(true);
       this.ui.choiceText.setText('请选择 1-6 前进步数\n(右键取消)').setVisible(true);
       this.ui.buyBtn.setVisible(false);
-      this.ui.skipBtn.setText('取消').setVisible(true);
+      this.ui.skipBtn.setText('取消').setX(320).setVisible(true);
 
       this.ui.diceButtons.forEach((btn) => btn.setVisible(true));
 
@@ -861,6 +867,7 @@ export default class GameEngine extends Phaser.Scene {
         this.ui.choiceBox.setVisible(false);
         this.ui.choiceText.setVisible(false);
         this.ui.skipBtn.setVisible(false);
+        this.ui.skipBtn.setText('跳过').setX(160); // reset position
         this.ui.skipBtn.removeAllListeners();
         this.ui.diceButtons.forEach((btn) => {
           btn.setVisible(false);
@@ -1012,11 +1019,12 @@ export default class GameEngine extends Phaser.Scene {
       container.style.left = '0';
       container.style.width = '100vw';
       container.style.height = '100vh';
-      container.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+      container.style.backgroundColor = 'transparent';
       container.style.display = 'flex';
       container.style.justifyContent = 'center';
       container.style.alignItems = 'center';
       container.style.zIndex = '1000';
+      container.style.pointerEvents = 'none'; // so clicks can pass through if we just removed background
       
       const modal = document.createElement('div');
       modal.style.backgroundColor = '#fff';
@@ -1024,6 +1032,8 @@ export default class GameEngine extends Phaser.Scene {
       modal.style.borderRadius = '10px';
       modal.style.textAlign = 'center';
       modal.style.minWidth = '300px';
+      modal.style.pointerEvents = 'auto'; // Re-enable pointer events for the modal itself
+
 
       const title = document.createElement('h2');
       title.innerText = `蓝图: ${tile.name}`;
@@ -1227,10 +1237,10 @@ export default class GameEngine extends Phaser.Scene {
       const cx = this.cameras.main.width / 2;
       const cy = this.cameras.main.height / 2;
       
-      const overlay = this.add.rectangle(cx, cy, 500, 350, 0xffffff)
+      const overlay = this.add.rectangle(cx, cy, 600, 500, 0xffffff)
         .setStrokeStyle(4, 0x333333).setScrollFactor(0).setDepth(1000);
       
-      const title = this.add.text(cx, cy - 140, `卡片商店 (拥有点券: ${player.points})`, {
+      const title = this.add.text(cx, cy - 200, `卡片商店 (拥有点券: ${player.points})`, {
         fontFamily: 'Arial', fontSize: '24px', color: '#222'
       }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
 
@@ -1255,8 +1265,8 @@ export default class GameEngine extends Phaser.Scene {
       };
 
       items.forEach((item, i) => {
-        const x = cx - 120 + (i % 2) * 240;
-        const y = cy - 40 + Math.floor(i / 2) * 80;
+        const x = cx - 180 + (i % 3) * 180;
+        const y = cy - 120 + Math.floor(i / 3) * 80;
         
         const btn = this.add.text(x, y, `${item.name}\n${item.cost} 点券`, {
           fontFamily: 'Arial', fontSize: '20px', backgroundColor: '#38a169', color: '#fff',
@@ -1290,7 +1300,7 @@ export default class GameEngine extends Phaser.Scene {
 
       refreshButtons();
 
-      const leaveBtn = this.add.text(cx, cy + 130, '离开商店', {
+      const leaveBtn = this.add.text(cx, cy + 200, '离开商店', {
         fontFamily: 'Arial', fontSize: '20px', backgroundColor: '#e53e3e', color: '#fff',
         padding: { x: 30, y: 10 }
       }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setScrollFactor(0).setDepth(1001);

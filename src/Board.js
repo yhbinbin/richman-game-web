@@ -509,26 +509,31 @@ export default class Board {
     const text = this.propertyLevelTexts[index];
     const rect = this.propertyRects[index];
     if (!rect || !text) return;
-    if (!player) {
-      rect.setFillStyle(0xb08968);
-      text.setText(level > 0 ? `${level}` : '');
-      text.setColor('#ffffff');
-      return;
-    }
-    rect.setFillStyle(player.color, 0.2);
-    
+
     let displayStr = '';
-    if (level === 0) {
-       displayStr = '';
-    } else {
+    if (level > 0) {
        if (buildingType === 'house') {
           displayStr = `H${level}`;
        } else if (buildingType === 'store') {
           displayStr = `S${level}`;
-          text.setColor('#FFA500'); // Orange for Store
        } else if (buildingType === 'park') {
           displayStr = `🌳`;
        }
+    }
+
+    if (!player) {
+      rect.setFillStyle(0xb08968);
+      text.setText(displayStr);
+      text.setColor('#ffffff');
+      return;
+    }
+
+    rect.setFillStyle(player.color, 0.2);
+    
+    if (buildingType === 'store') {
+       text.setColor('#FFA500'); // Orange for Store
+    } else {
+       text.setColor('#1a1a1a'); // Default dark color
     }
     
     text.setText(displayStr);
