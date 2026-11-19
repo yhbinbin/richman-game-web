@@ -12,6 +12,10 @@ export default class TurnManager {
     return this.currentIndex;
   }
 
+  setCurrentIndex(index) {
+    this.currentIndex = index;
+  }
+
   nextTurn() {
     const start = this.currentIndex;
     let next = this.currentIndex;
