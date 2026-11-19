@@ -4,6 +4,8 @@ import test from 'node:test';
 import Player from '../Player.js';
 import { formatFullDate } from '../utils/TimeUtils.js';
 import {
+  OPTIONAL_GAME_FIELDS,
+  OPTIONAL_PLAYER_FIELDS,
   SAVE_MESSAGES,
   applySnapshot,
   captureState,
@@ -19,6 +21,7 @@ import {
   writeSlot,
   describeEngine,
 } from './SaveManager.js';
+import { DEV_AUTOSAVE_KEY, createDevAutoSave, isDevMode } from './DevAutoSave.js';
 
 function tokenMock() {
   return {
@@ -343,9 +346,15 @@ test('rejects incompatible or inconsistent saves', () => {
   badLevel.properties.find((item) => item.index === 2).level = 4;
   assert.equal(validateSnapshot(badLevel, context).message, SAVE_MESSAGES.properties);
 
-  const badCard = structuredClone(base);
-  badCard.players[0].inventory[0].name = '地雷';
-  assert.equal(validateSnapshot(badCard, context).message, SAVE_MESSAGES.players);
+  const renamedCard = structuredClone(base);
+  renamedCard.players[0].inventory[0].name = '旧名字';
+  const renamed = validateSnapshot(renamedCard, context);
+  assert.equal(renamed.ok, true);
+  assert.equal(renamed.snapshot.players[0].inventory[0].name, '遥控骰子');
+
+  const brokenCard = structuredClone(base);
+  brokenCard.players[0].inventory[0] = { type: '', name: '空' };
+  assert.equal(validateSnapshot(brokenCard, context).message, SAVE_MESSAGES.players);
 
   const currentBankrupt = structuredClone(base);
   currentBankrupt.game.currentPlayerIndex = 3;
@@ -491,4 +500,161 @@ test('storage write failures are reported', () => {
   assert.equal(writeSlot(storage, 0, { id: 'richman-game' }).message, SAVE_MESSAGES.write);
   assert.equal(removeSlot(storage, 0).message, SAVE_MESSAGES.storage);
   assert.equal(listSlots(null)[0].unavailable, true);
+});
+
+test('older snapshots keep progress and fill defaults for fields added later', () => {
+  OPTIONAL_PLAYER_FIELDS.shieldTurns = 0;
+  OPTIONAL_GAME_FIELDS.forecast = 'clear';
+  try {
+    const engine = makeEngine();
+    const snapshot = captureState(engine);
+    const removedRoad = snapshot.properties.find((item) => item.ownerIndex === null && item.level === 0);
+    const owned = snapshot.properties.find((item) => item.ownerIndex === 0);
+    delete snapshot.version;
+    delete snapshot.savedAt;
+    snapshot.futureSystem = { enabled: true };
+    snapshot.mines = [];
+    snapshot.players.forEach((player) => {
+      delete player.remoteDice;
+      delete player.stayNextTurn;
+      delete player.hospitalTurns;
+      delete player.startAssets;
+      delete player.shieldTurns;
+      player.inventory.push({ type: 'future', name: '未来卡', rule: 'later' });
+    });
+    delete snapshot.game.targetPriceIndex;
+    delete snapshot.game.diceFace;
+    delete snapshot.game.turnsThisDay;
+    delete snapshot.game.forecast;
+    snapshot.properties = snapshot.properties.filter((item) => item !== removedRoad);
+    owned.buildingType = 'villa';
+    owned.level = 9;
+
+    const verdict = validateSnapshot(snapshot, describeEngine(engine));
+    assert.equal(verdict.ok, true);
+    assert.equal(verdict.snapshot.version, 1);
+    assert.equal(verdict.snapshot.players[0].remoteDice, false);
+    assert.equal(verdict.snapshot.players[0].stayNextTurn, false);
+    assert.equal(verdict.snapshot.players[0].hospitalTurns, 0);
+    assert.equal(verdict.snapshot.players[0].startAssets, 100000);
+    assert.equal(verdict.snapshot.players[0].shieldTurns, 0);
+    assert.equal(verdict.snapshot.players[0].inventory.at(-1).type, 'future');
+    assert.equal(verdict.snapshot.players[0].inventory.at(-1).name, '未来卡');
+    assert.equal(verdict.snapshot.game.targetPriceIndex, snapshot.game.priceIndex);
+    assert.equal(verdict.snapshot.game.diceFace, 1);
+    assert.equal(verdict.snapshot.game.turnsThisDay, 0);
+    assert.equal(verdict.snapshot.game.forecast, 'clear');
+    const restoredRoad = verdict.snapshot.properties.find((item) => item.index === removedRoad.index);
+    assert.equal(restoredRoad.ownerIndex, null);
+    assert.equal(restoredRoad.level, 0);
+    const villa = verdict.snapshot.properties.find((item) => item.index === owned.index);
+    assert.equal(villa.ownerIndex, 0);
+    assert.equal(villa.buildingType, null);
+    assert.equal(villa.level, 5);
+    assert.equal(verdict.snapshot.futureSystem, undefined);
+
+    scramble(engine);
+    assert.equal(applySnapshot(engine, snapshot).ok, true);
+    assert.equal(engine.players[0].money, 80000);
+    assert.equal(engine.players[0].shieldTurns, 0);
+    assert.equal(engine.players[0].remoteDice, false);
+    assert.equal(engine.players[0].inventory.some((card) => card.type === 'future'), true);
+    assert.equal(engine.players[0].inventory.some((card) => card.type === 'remote'), true);
+    assert.equal(engine.forecast, 'clear');
+    assert.equal(engine.board.tiles[owned.index].owner, engine.players[0]);
+    assert.equal(engine.board.tiles[owned.index].level, 5);
+    assert.equal(engine.board.tiles[owned.index].buildingType, undefined);
+    assert.equal(engine.board.tiles[removedRoad.index].owner, null);
+    assert.equal(engine.board.tiles[removedRoad.index].level, 0);
+    assert.equal(engine.turnManager.currentIndex, 1);
+  } finally {
+    delete OPTIONAL_PLAYER_FIELDS.shieldTurns;
+    delete OPTIONAL_GAME_FIELDS.forecast;
+  }
+});
+
+test('dev autosave is separate from the manual slots and resumes an older snapshot', () => {
+  assert.equal(isDevMode(), false);
+  const engine = makeEngine();
+  const storage = createMemoryStorage();
+  const autosave = createDevAutoSave(engine, { dev: true, storage, delay: 400 });
+  assert.equal(autosave.flush().skipped, true);
+
+  autosave.arm();
+  engine.players[0].money = 4242;
+  engine.players[0].inventory.push({ type: 'park', name: '公园卡' });
+  const road = engine.board.tiles.find((tile) => tile.type === 'road' && tile.index !== 0 && tile.index !== 2 && tile.index !== 4);
+  road.owner = engine.players[2];
+  road.level = 2;
+  road.buildingType = 'house';
+  assert.equal(autosave.flush().ok, true);
+  assert.equal(listSlots(storage).some((slot) => slot.occupied), false);
+  assert.equal(storage.getItem('richman-game:save:slot:0'), null);
+
+  const resumed = makeEngine();
+  resumed.players[0].money = 5;
+  const loader = createDevAutoSave(resumed, { dev: true, storage });
+  const restored = loader.restoreIfPresent();
+  assert.equal(restored.ok, true);
+  assert.equal(resumed.players[0].money, 4242);
+  assert.equal(resumed.players[0].inventory.some((card) => card.type === 'park'), true);
+  assert.equal(resumed.board.tiles[road.index].owner, resumed.players[2]);
+  assert.equal(resumed.board.tiles[road.index].level, 2);
+
+  const production = makeEngine();
+  production.players[0].money = 5;
+  const disabled = createDevAutoSave(production, { dev: false, storage });
+  assert.equal(disabled.restoreIfPresent().skipped, true);
+  assert.equal(disabled.flush().skipped, true);
+  assert.equal(disabled.clear().skipped, true);
+  assert.equal(production.players[0].money, 5);
+  assert.equal(storage.getItem(DEV_AUTOSAVE_KEY) !== null, true);
+
+  storage.setItem(DEV_AUTOSAVE_KEY, '{');
+  const broken = createDevAutoSave(makeEngine(), { dev: true, storage });
+  const failed = broken.restoreIfPresent();
+  assert.equal(failed.ok, false);
+  assert.equal(failed.message, SAVE_MESSAGES.invalid);
+
+  const fresh = makeEngine();
+  fresh.players[0].money = 777;
+  const mismatched = captureState(fresh);
+  mismatched.board.pathHash += 1;
+  storage.setItem(DEV_AUTOSAVE_KEY, JSON.stringify(mismatched));
+  const mismatchEngine = makeEngine();
+  const mismatch = createDevAutoSave(mismatchEngine, { dev: true, storage }).restoreIfPresent();
+  assert.equal(mismatch.message, SAVE_MESSAGES.board);
+  assert.equal(mismatchEngine.players[0].money, 80000);
+
+  const clearing = createDevAutoSave(makeEngine(), { dev: true, storage });
+  assert.equal(clearing.clear().ok, true);
+  assert.equal(storage.getItem(DEV_AUTOSAVE_KEY), null);
+});
+
+test('dev autosave waits until it is armed and can flush on a timer', () => {
+  const engine = makeEngine();
+  const storage = createMemoryStorage();
+  storage.setItem(DEV_AUTOSAVE_KEY, JSON.stringify(validateSnapshot(captureState(engine), describeEngine(engine)).snapshot));
+  let callback = null;
+  engine.time = {
+    delayedCall(_delay, fn) {
+      callback = fn;
+      return { remove() { callback = null; } };
+    },
+  };
+  const autosave = createDevAutoSave(engine, { dev: true, storage, delay: 400 });
+  engine.players[0].money = 111;
+  autosave.schedule();
+  autosave.flush();
+  assert.equal(JSON.parse(storage.getItem(DEV_AUTOSAVE_KEY)).players[0].money, 80000);
+  autosave.arm();
+  autosave.schedule();
+  assert.equal(typeof callback, 'function');
+  engine.players[0].money = 333;
+  callback();
+  assert.equal(JSON.parse(storage.getItem(DEV_AUTOSAVE_KEY)).players[0].money, 333);
+  autosave.disarm();
+  engine.players[0].money = 999;
+  autosave.flush();
+  assert.equal(JSON.parse(storage.getItem(DEV_AUTOSAVE_KEY)).players[0].money, 333);
 });

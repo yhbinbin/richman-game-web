@@ -14,6 +14,7 @@ import {
   validateSnapshot,
   writeSlot,
 } from './SaveManager.js';
+import { isDevMode } from './DevAutoSave.js';
 
 const DEPTH = 4000;
 
@@ -80,16 +81,19 @@ export default class SavePanel {
     this.elements.push(dimmer);
 
     const panel = engine.add
-      .rectangle(cx, cy, panelW, panelH, 0xffffff)
-      .setStrokeStyle(2, 0x333333)
+      .rectangle(cx, cy, panelW, panelH, 0xfffdf8)
+      .setStrokeStyle(2, 0xcbbfa8)
       .setScrollFactor(0)
       .setDepth(DEPTH);
     this.elements.push(panel);
 
     const left = cx - panelW / 2 + 28;
     const top = cy - panelH / 2 + 24;
-    this.addText(left, top, '存档管理', { fontSize: '22px', color: '#222' });
-    this.addText(left, top + 32, '存档保存在本机浏览器中，刷新页面后仍可读取。操作进行中时不能存读档。', {
+    this.addText(left, top, '存档管理', { fontSize: '22px', color: '#2c2824', fontStyle: 'bold' });
+    const intro = isDevMode()
+      ? '三个槽位需要手动保存。开发模式会另外自动保存进度，刷新后继续；重新开始会清空这份自动存档。'
+      : '存档保存在本机浏览器中，刷新页面后仍可读取。操作进行中时不能存读档。';
+    this.addText(left, top + 32, intro, {
       fontSize: '13px',
       color: '#555',
       wordWrap: { width: panelW - 56 },

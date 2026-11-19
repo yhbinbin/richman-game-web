@@ -9,6 +9,7 @@ import NpcHandler from './handlers/NpcHandler.js';
 import { formatFullDate } from './utils/TimeUtils.js';
 import SavePanel from './save/SavePanel.js';
 import { SAVE_MESSAGES, getLocalStorage, hasAnySlot } from './save/SaveManager.js';
+import { createDevAutoSave, isDevMode } from './save/DevAutoSave.js';
 
 export default class GameEngine extends Phaser.Scene {
   constructor() {
@@ -83,6 +84,25 @@ export default class GameEngine extends Phaser.Scene {
     if (hasAnySlot(getLocalStorage())) {
       this.log('检测到本地存档，可点击「读档」继续');
     }
+    this.devAutoSave = createDevAutoSave(this, {
+      dev: isDevMode(),
+      storage: getLocalStorage(),
+    });
+    const restored = this.devAutoSave.restoreIfPresent();
+    if (restored.ok) {
+      if (!this.gameOver) this.log('已恢复开发自动存档');
+      if (this.ui.notice) {
+        this.ui.notice.setText('已恢复开发自动存档').setVisible(true);
+        this.time.delayedCall(1200, () => {
+          if (this.ui.notice) this.ui.notice.setVisible(false);
+        });
+      }
+    } else if (restored.message) {
+      this.log(`开发自动存档无法读取：${restored.message}`);
+    }
+    this.devAutoSave.arm();
+    this.devAutoSave.bindLifecycle();
+    this.devAutoSave.flush();
   }
 
   resetMatchState() {
@@ -98,6 +118,7 @@ export default class GameEngine extends Phaser.Scene {
     this.directionArrow = null;
     this.ui = {};
     this.savePanel = null;
+    this.devAutoSave = null;
   }
 
   handleResize(gameSize) {
@@ -110,142 +131,192 @@ export default class GameEngine extends Phaser.Scene {
     this.layoutUI(width, height);
   }
 
+  getHudMetrics(width, height) {
+    const top = 92;
+    const bottom = 104;
+    const side = width < 980 ? 0 : 232;
+    return {
+      top,
+      bottom,
+      side,
+      play: {
+        x: 20,
+        y: top + 12,
+        width: Math.max(160, width - 40 - side),
+        height: Math.max(160, height - top - bottom - 24),
+      },
+    };
+  }
+
   layoutUI(width, height) {
-    if (this.ui.rankTitle) {
-      this.ui.rankTitle.setPosition(width - 200, 16);
+    const hud = this.getHudMetrics(width, height);
+    const play = hud.play;
+    if (this.ui.topBar) {
+      this.ui.topBar.setPosition(width / 2, hud.top / 2).setSize(width, hud.top);
     }
-    if (this.ui.rankList) {
-      this.ui.rankList.setPosition(width - 200, 40);
+    if (this.ui.bottomBar) {
+      this.ui.bottomBar.setPosition(width / 2, height - hud.bottom / 2).setSize(width, hud.bottom);
+    }
+    if (this.ui.sidePanel) {
+      const sideH = Math.min(240, Math.max(214, play.height * 0.42));
+      this.ui.sidePanel
+        .setPosition(width - hud.side / 2 - 12, hud.top + 16 + sideH / 2)
+        .setSize(hud.side - 8, sideH)
+        .setVisible(hud.side > 0);
     }
 
-    const cardTitleY = height - 90;
-    const cardSlotY = height - 50;
-    
-    if (this.ui.cardTitle) {
-      this.ui.cardTitle.setPosition(20, cardTitleY);
+    if (this.ui.status) this.ui.status.setPosition(22, 12).setWordWrapWidth(Math.max(220, width - 390));
+    if (this.ui.meta) this.ui.meta.setPosition(22, 38).setWordWrapWidth(Math.max(220, width - 390));
+    if (this.ui.money) this.ui.money.setPosition(22, 62);
+    if (this.ui.log) {
+      this.ui.log.setPosition(22, hud.top + 4);
+      this.ui.log.setWordWrapWidth(Math.max(240, play.width * 0.55));
     }
-    
+    if (this.ui.notice) this.ui.notice.setPosition(play.x + 24, play.y + 28);
+
+    if (this.ui.dice) this.ui.dice.setPosition(width - 214, 26);
+    if (this.ui.restartBtn) this.ui.restartBtn.setPosition(width - 360, 52);
+    if (this.ui.rollBtn) this.ui.rollBtn.setPosition(width - 128, 46);
+
+    const sideX = width - hud.side + 4;
+    if (this.ui.rankTitle) this.ui.rankTitle.setPosition(sideX, hud.top + 26).setVisible(hud.side > 0);
+    if (this.ui.rankList) this.ui.rankList.setPosition(sideX, hud.top + 50).setVisible(hud.side > 0);
+    if (this.ui.saveBtn) this.ui.saveBtn.setPosition(sideX, hud.top + 168).setVisible(hud.side > 0);
+    if (this.ui.loadBtn) this.ui.loadBtn.setPosition(sideX + 78, hud.top + 168).setVisible(hud.side > 0);
+
+    const cardTitleY = height - hud.bottom + 10;
+    const cardSlotY = height - 58;
+    if (this.ui.cardTitle) this.ui.cardTitle.setPosition(22, cardTitleY);
+    const slotW = Math.max(86, Math.min(118, Math.floor((width - 150) / 8) - 8));
+    const slotH = 32;
+    const gapX = 8;
     if (this.ui.cardSlots && this.ui.cardSlots.length) {
-      const startX = 20;
-      const slotW = 120;
-      const slotH = 30;
-      const gapX = 8;
       for (let i = 0; i < 8; i += 1) {
-        const x = startX + i * (slotW + gapX);
+        const x = 22 + i * (slotW + gapX);
         if (this.ui.cardSlots[i]) {
           this.ui.cardSlots[i].setPosition(x + slotW / 2, cardSlotY + slotH / 2);
+          this.ui.cardSlots[i].setSize(slotW, slotH);
         }
-        if (this.ui.cardTexts[i]) {
-          this.ui.cardTexts[i].setPosition(x + 6, cardSlotY + 7);
-        }
+        if (this.ui.cardTexts[i]) this.ui.cardTexts[i].setPosition(x + 8, cardSlotY + 8);
       }
     }
+    if (this.ui.queryBtn) this.ui.queryBtn.setPosition(width - 92, cardSlotY);
 
-    if (this.ui.queryBtn) {
-      this.ui.queryBtn.setPosition(width - 80, cardSlotY);
-    }
-    if (this.ui.saveBtn) {
-      this.ui.saveBtn.setPosition(width - 200, 128);
-    }
-    if (this.ui.loadBtn) {
-      this.ui.loadBtn.setPosition(width - 120, 128);
-    }
-    if (this.savePanel && this.savePanel.isOpen()) {
-      this.savePanel.layout();
-    }
+    if (this.savePanel && this.savePanel.isOpen()) this.savePanel.layout();
 
-    const cx = width / 2;
-    const cy = height / 2;
-
+    const dialogX = play.x + play.width / 2;
+    const dialogY = height - hud.bottom - 78;
+    this.ui.anchors = {
+      buy: { x: dialogX - 150, y: dialogY + 18 },
+      skip: { x: dialogX - 48, y: dialogY + 18 },
+      skipWide: { x: dialogX + 150, y: dialogY + 18 },
+    };
     if (this.ui.choiceBox) {
-      this.ui.choiceBox.setPosition(cx, cy + 280);
-      this.ui.choiceText.setPosition(cx - 160, cy + 245);
-      this.ui.buyBtn.setPosition(cx - 140, cy + 285);
-      this.ui.skipBtn.setPosition(cx - 40, cy + 285);
+      this.ui.choiceBox.setPosition(dialogX, dialogY).setSize(460, 108);
+      this.ui.choiceText.setPosition(dialogX - 210, dialogY - 38);
+      this.ui.buyBtn.setPosition(this.ui.anchors.buy.x, this.ui.anchors.buy.y);
+      this.ui.skipBtn.setPosition(this.ui.anchors.skip.x, this.ui.anchors.skip.y);
       if (this.ui.diceButtons) {
         this.ui.diceButtons.forEach((btn, i) => {
-          btn.setPosition(cx - 170 + i * 55, cy + 290);
+          btn.setPosition(dialogX - 190 + i * 58, dialogY + 16);
         });
       }
     }
 
+    const cx = width / 2;
+    const cy = height / 2;
     if (this.ui.summaryBox) {
       this.ui.summaryBox.setPosition(cx, cy);
       this.ui.summaryText.setPosition(cx - 420, cy - 230);
       this.ui.summaryClose.setPosition(cx + 380, cy - 230);
     }
-
-    if (this.ui.dice) {
-      this.ui.dice.setPosition(cx - 30, 16);
-    }
-    if (this.ui.rollBtn) {
-      this.ui.rollBtn.setPosition(cx - 40, 44);
-    }
-    if (this.ui.restartBtn) {
-      this.ui.restartBtn.setPosition(cx + 60, 44);
-    }
   }
 
   createUI() {
+    const hudDepth = 80;
+    this.ui.topBar = this.add.rectangle(0, 0, 10, 10, 0xfffdf8)
+      .setStrokeStyle(1, 0xe4d5c3)
+      .setScrollFactor(0)
+      .setDepth(hudDepth);
+    this.ui.bottomBar = this.add.rectangle(0, 0, 10, 10, 0xfffdf8)
+      .setStrokeStyle(1, 0xe4d5c3)
+      .setScrollFactor(0)
+      .setDepth(hudDepth);
+    this.ui.sidePanel = this.add.rectangle(0, 0, 10, 10, 0xfffdf8)
+      .setStrokeStyle(1, 0xe4d5c3)
+      .setScrollFactor(0)
+      .setDepth(hudDepth);
+
     this.ui.status = this.add.text(20, 16, '', {
       fontFamily: 'Arial',
-      fontSize: '20px',
-      color: '#333',
-    }).setScrollFactor(0);
-
-    this.ui.money = this.add.text(20, 44, '', {
-      fontFamily: 'Arial',
       fontSize: '18px',
-      color: '#333',
-    }).setScrollFactor(0);
+      color: '#2c2824',
+      fontStyle: 'bold',
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
 
-    this.ui.log = this.add.text(20, 72, '', {
+    this.ui.meta = this.add.text(20, 38, '', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#6e655c',
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
+
+    this.ui.money = this.add.text(20, 62, '', {
       fontFamily: 'Arial',
       fontSize: '16px',
-      color: '#555',
-      wordWrap: { width: 360 },
-    }).setScrollFactor(0);
+      color: '#2c2824',
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
+
+    this.ui.log = this.add.text(20, 96, '', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#5c5146',
+      wordWrap: { width: 420 },
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
 
     this.ui.dice = this.add.text(620, 16, `骰子 ${this.diceFace || 1}`, {
       fontFamily: 'Arial',
-      fontSize: '20px',
-      color: '#222',
-    }).setScrollFactor(0);
+      fontSize: '18px',
+      color: '#2c2824',
+      fontStyle: 'bold',
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
 
     this.ui.rollBtn = this.add
       .text(620, 44, '掷骰子', {
         fontFamily: 'Arial',
         fontSize: '20px',
-        backgroundColor: '#2b6cb0',
-        color: '#fff',
-        padding: { x: 12, y: 8 },
+        backgroundColor: '#2f6f62',
+        color: '#fffdf8',
+        padding: { x: 14, y: 8 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
+      .setDepth(hudDepth + 3)
       .on('pointerdown', () => this.handleRoll());
 
     this.ui.rankTitle = this.add.text(1180, 16, '资产排名', {
       fontFamily: 'Arial',
-      fontSize: '16px',
-      color: '#333',
-    }).setScrollFactor(0);
+      fontSize: '15px',
+      color: '#2c2824',
+      fontStyle: 'bold',
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
     this.ui.rankList = this.add.text(1180, 40, '', {
       fontFamily: 'Arial',
       fontSize: '14px',
-      color: '#333',
-      lineSpacing: 4,
-    }).setScrollFactor(0);
+      color: '#3f3832',
+      lineSpacing: 6,
+    }).setScrollFactor(0).setDepth(hudDepth + 2);
 
     this.ui.restartBtn = this.add
       .text(520, 44, '重新开始', {
         fontFamily: 'Arial',
         fontSize: '20px',
-        backgroundColor: '#444',
-        color: '#fff',
+        backgroundColor: '#6d675f',
+        color: '#fffdf8',
         padding: { x: 10, y: 6 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
+      .setDepth(hudDepth + 3)
       .setVisible(false)
       .on('pointerdown', () => this.restartGame());
 
@@ -253,58 +324,61 @@ export default class GameEngine extends Phaser.Scene {
       .text(1180, 128, '存档', {
         fontFamily: 'Arial',
         fontSize: '16px',
-        backgroundColor: '#2b6cb0',
-        color: '#fff',
+        backgroundColor: '#2f6f62',
+        color: '#fffdf8',
         padding: { x: 10, y: 6 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
-      .setDepth(1500)
+      .setDepth(hudDepth + 3)
       .on('pointerdown', () => this.openSavePanel());
     this.ui.loadBtn = this.add
       .text(1260, 128, '读档', {
         fontFamily: 'Arial',
         fontSize: '16px',
-        backgroundColor: '#38a169',
-        color: '#fff',
+        backgroundColor: '#3d6f9a',
+        color: '#fffdf8',
         padding: { x: 10, y: 6 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
-      .setDepth(1500)
+      .setDepth(hudDepth + 3)
       .on('pointerdown', () => this.openSavePanel());
 
     this.ui.choiceBox = this.add
-      .rectangle(200, 560, 360, 90, 0xffffff)
-      .setStrokeStyle(2, 0x333333)
+      .rectangle(200, 560, 460, 108, 0xfffdf8)
+      .setStrokeStyle(2, 0xcbbfa8)
       .setScrollFactor(0)
+      .setDepth(2500)
       .setVisible(false);
     this.ui.choiceText = this.add.text(40, 525, '', {
       fontFamily: 'Arial',
       fontSize: '16px',
-      color: '#222',
-    }).setVisible(false).setScrollFactor(0);
+      color: '#2c2824',
+    }).setVisible(false).setScrollFactor(0).setDepth(2501);
     this.ui.buyBtn = this.add
       .text(60, 565, '购买', {
         fontFamily: 'Arial',
         fontSize: '18px',
-        backgroundColor: '#38a169',
-        color: '#fff',
-        padding: { x: 10, y: 6 },
+        backgroundColor: '#2f7d57',
+        color: '#fffdf8',
+        padding: { x: 12, y: 6 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
+      .setDepth(2502)
       .setVisible(false);
     this.ui.skipBtn = this.add
       .text(160, 565, '跳过', {
         fontFamily: 'Arial',
         fontSize: '18px',
-        backgroundColor: '#718096',
-        color: '#fff',
-        padding: { x: 10, y: 6 },
+        backgroundColor: '#6d675f',
+        color: '#fffdf8',
+        padding: { x: 12, y: 6 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
+      .setDepth(2502)
       .setVisible(false);
 
     this.ui.diceButtons = [];
@@ -313,21 +387,22 @@ export default class GameEngine extends Phaser.Scene {
         .text(30 + (i - 1) * 55, 570, `${i}`, {
           fontFamily: 'Arial',
           fontSize: '18px',
-          backgroundColor: '#2b6cb0',
-          color: '#fff',
-          padding: { x: 10, y: 6 },
+          backgroundColor: '#2f6f62',
+          color: '#fffdf8',
+          padding: { x: 12, y: 6 },
         })
         .setInteractive({ useHandCursor: true })
         .setScrollFactor(0)
+        .setDepth(2502)
         .setVisible(false);
       this.ui.diceButtons.push(btn);
     }
 
     this.ui.cardTitle = this.add.text(20, 820, '当前玩家卡片', {
       fontFamily: 'Arial',
-      fontSize: '16px',
-      color: '#222',
-    }).setScrollFactor(0);
+      fontSize: '14px',
+      color: '#6e655c',
+    }).setScrollFactor(0).setDepth(90);
     this.ui.cardSlots = [];
     this.ui.cardTexts = [];
 
@@ -335,17 +410,18 @@ export default class GameEngine extends Phaser.Scene {
       .text(1220, 820, '查询', {
         fontFamily: 'Arial',
         fontSize: '18px',
-        backgroundColor: '#444',
-        color: '#fff',
-        padding: { x: 10, y: 6 },
+        backgroundColor: '#3d4f48',
+        color: '#fffdf8',
+        padding: { x: 12, y: 7 },
       })
       .setInteractive({ useHandCursor: true })
       .setScrollFactor(0)
+      .setDepth(90)
       .on('pointerdown', () => this.openSummary());
 
     this.ui.summaryBox = this.add
-      .rectangle(700, 450, 900, 520, 0xffffff)
-      .setStrokeStyle(2, 0x333333)
+      .rectangle(700, 450, 900, 520, 0xfffdf8)
+      .setStrokeStyle(2, 0xcbbfa8)
       .setScrollFactor(0)
       .setDepth(3000)
       .setVisible(false);
@@ -376,7 +452,7 @@ export default class GameEngine extends Phaser.Scene {
       color: '#b91c1c',
       backgroundColor: '#fee2e2',
       padding: { x: 8, y: 4 },
-    }).setScrollFactor(0).setVisible(false);
+    }).setScrollFactor(0).setDepth(200).setVisible(false);
   }
 
   enableCameraDrag() {
@@ -405,28 +481,14 @@ export default class GameEngine extends Phaser.Scene {
   }
 
   centerCameraOnBoard(bounds) {
+    const play = this.getHudMetrics(this.scale.width, this.scale.height).play;
     const cx = bounds.x + bounds.width / 2;
     const cy = bounds.y + bounds.height / 2;
-
-    let boundX = bounds.x;
-    let boundY = bounds.y;
-    let boundW = bounds.width;
-    let boundH = bounds.height;
-
-    const camW = this.cameras.main.width;
-    const camH = this.cameras.main.height;
-
-    if (boundW < camW) {
-      boundX -= (camW - boundW) / 2;
-      boundW = camW;
-    }
-    if (boundH < camH) {
-      boundY -= (camH - boundH) / 2;
-      boundH = camH;
-    }
-
-    this.cameras.main.setBounds(boundX, boundY, boundW, boundH);
-    this.cameras.main.centerOn(cx, cy);
+    const playCx = play.x + play.width / 2;
+    const playCy = play.y + play.height / 2;
+    this.cameras.main.setBounds(bounds.x - 240, bounds.y - 180, bounds.width + 480, bounds.height + 360);
+    this.cameras.main.scrollX = cx - playCx;
+    this.cameras.main.scrollY = cy - playCy;
   }
 
   async handleRoll() {
@@ -494,6 +556,7 @@ export default class GameEngine extends Phaser.Scene {
     }
     this.turnManager.nextTurn();
     this.updateUI();
+    if (this.devAutoSave) this.devAutoSave.flush();
   }
 
   async movePlayer(player, steps) {
@@ -633,6 +696,7 @@ export default class GameEngine extends Phaser.Scene {
       });
     }
     if (!this.gameOver) this.log('已读取存档');
+    if (this.devAutoSave) this.devAutoSave.flush();
   }
 
   hideChoiceUI() {
@@ -650,10 +714,11 @@ export default class GameEngine extends Phaser.Scene {
     const current = this.turnManager.getCurrentPlayer();
     this.updatePriceIndex();
     this.board.setPriceIndex(this.priceIndex);
-    this.ui.status.setText(
-      `当前回合：${current.name} | 日期：${formatFullDate(this.gameDate)} | 物价：${this.priceIndex.toFixed(1)}`
-    );
-    this.ui.money.setText(`${current.name}：${current.money} 金钱 / ${current.points} 点券`);
+    this.ui.status.setText(`当前回合：${current.name}`);
+    if (this.ui.meta) {
+      this.ui.meta.setText(`${formatFullDate(this.gameDate)}    物价 ${this.priceIndex.toFixed(1)}`);
+    }
+    this.ui.money.setText(`${current.money} 金钱    ${current.points} 点券`);
     if (this.ui.cardTexts && this.ui.cardTexts.length) {
       this.updateCardUI();
     }
@@ -664,6 +729,7 @@ export default class GameEngine extends Phaser.Scene {
       p.setHighlight(p === current && !p.isBankrupt);
     });
     this.updateDirectionArrow(current);
+    if (this.devAutoSave) this.devAutoSave.schedule();
   }
 
   updateDirectionArrow(player) {
@@ -779,6 +845,10 @@ export default class GameEngine extends Phaser.Scene {
   }
 
   restartGame() {
+    if (this.devAutoSave) {
+      this.devAutoSave.disarm();
+      this.devAutoSave.clear();
+    }
     this.scene.restart();
   }
 
@@ -806,15 +876,16 @@ export default class GameEngine extends Phaser.Scene {
     for (let i = 0; i < 8; i += 1) {
       const x = startX + i * (slotW + gapX);
       const rect = this.add
-        .rectangle(x + slotW / 2, startY + slotH / 2, slotW, slotH, 0xffffff)
-        .setStrokeStyle(1, 0x333333)
+        .rectangle(x + slotW / 2, startY + slotH / 2, slotW, slotH, 0xfffdf8)
+        .setStrokeStyle(1, 0xd7c8b4)
         .setInteractive({ useHandCursor: true })
-        .setScrollFactor(0);
+        .setScrollFactor(0)
+        .setDepth(90);
       const text = this.add.text(x + 6, startY + 7, '', {
         fontFamily: 'Arial',
         fontSize: '12px',
-        color: '#222',
-      }).setScrollFactor(0);
+        color: '#2c2824',
+      }).setScrollFactor(0).setDepth(91);
       rect.on('pointerdown', () => this.useCard(i));
       this.ui.cardSlots.push(rect);
       this.ui.cardTexts.push(text);
@@ -832,10 +903,10 @@ export default class GameEngine extends Phaser.Scene {
       const rect = this.ui.cardSlots[i];
       if (card) {
         text.setText(card.name);
-        rect.setFillStyle(0xf7f7f7);
+        rect.setFillStyle(0xfffdf8);
       } else {
         text.setText('空');
-        rect.setFillStyle(0xffffff);
+        rect.setFillStyle(0xf6f1e8);
       }
     }
   }
@@ -967,7 +1038,7 @@ export default class GameEngine extends Phaser.Scene {
       this.ui.choiceBox.setVisible(true);
       this.ui.choiceText.setText('请选择 1-6 前进步数\n(右键取消)').setVisible(true);
       this.ui.buyBtn.setVisible(false);
-      this.ui.skipBtn.setText('取消').setX(320).setVisible(true);
+      this.ui.skipBtn.setText('取消').setX(this.ui.anchors ? this.ui.anchors.skipWide.x : 320).setVisible(true);
 
       this.ui.diceButtons.forEach((btn) => btn.setVisible(true));
 
@@ -977,7 +1048,7 @@ export default class GameEngine extends Phaser.Scene {
         this.ui.choiceBox.setVisible(false);
         this.ui.choiceText.setVisible(false);
         this.ui.skipBtn.setVisible(false);
-        this.ui.skipBtn.setText('跳过').setX(160); // reset position
+        this.ui.skipBtn.setText('跳过').setX(this.ui.anchors ? this.ui.anchors.skip.x : 160);
         this.ui.skipBtn.removeAllListeners();
         this.ui.diceButtons.forEach((btn) => {
           btn.setVisible(false);
@@ -1278,8 +1349,8 @@ export default class GameEngine extends Phaser.Scene {
     // 背景
     const validCount = targetPlayers.length;
     const overlayHeight = Math.max(200, 100 + validCount * 50);
-    const overlay = this.add.rectangle(cx, cy, 300, overlayHeight, 0xffffff)
-      .setStrokeStyle(4, 0x333333).setScrollFactor(0).setDepth(2000);
+    const overlay = this.add.rectangle(cx, cy, 320, overlayHeight, 0xfffdf8)
+      .setStrokeStyle(2, 0xcbbfa8).setScrollFactor(0).setDepth(2000);
     const title = this.add.text(cx, cy - overlayHeight/2 + 30, `选择${cardName}目标\n(右键取消)`, {
       fontFamily: 'Arial', fontSize: '20px', color: '#222', align: 'center'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2001);
@@ -1350,14 +1421,17 @@ export default class GameEngine extends Phaser.Scene {
       const cx = this.cameras.main.width / 2;
       const cy = this.cameras.main.height / 2;
       
-      const overlay = this.add.rectangle(cx, cy, 600, 500, 0xffffff)
-        .setStrokeStyle(4, 0x333333).setScrollFactor(0).setDepth(1000);
+      const dim = this.add.rectangle(cx, cy, this.scale.width, this.scale.height, 0x2c2824, 0.28)
+        .setScrollFactor(0).setDepth(999).setInteractive();
+      dim.on('pointerdown', (_pointer, _x, _y, event) => event.stopPropagation());
+      const overlay = this.add.rectangle(cx, cy, 640, 520, 0xfffdf8)
+        .setStrokeStyle(2, 0xcbbfa8).setScrollFactor(0).setDepth(1000);
       
       const title = this.add.text(cx, cy - 200, `卡片商店 (拥有点券: ${player.points})`, {
         fontFamily: 'Arial', fontSize: '24px', color: '#222'
       }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
 
-      const uiElements = [overlay, title];
+      const uiElements = [dim, overlay, title];
       const buttons = [];
       const purchased = new Set();
 

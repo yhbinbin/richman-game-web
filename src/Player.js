@@ -17,12 +17,12 @@ export default class Player {
   }
 
   createToken(scene, position, offsetIndex) {
-    const radius = 6;
+    const radius = 8;
     const offsets = [
-      { x: -6, y: -6 },
-      { x: 6, y: -6 },
-      { x: -6, y: 6 },
-      { x: 6, y: 6 },
+      { x: -9, y: -9 },
+      { x: 9, y: -9 },
+      { x: -9, y: 9 },
+      { x: 9, y: 9 },
     ];
     const offset = offsets[offsetIndex % offsets.length];
     this.tokenOffset = { x: offset.x, y: offset.y };
@@ -32,7 +32,7 @@ export default class Player {
       radius,
       this.color
     );
-    this.token.setStrokeStyle(1.5, 0xffffff);
+    this.token.setStrokeStyle(2, 0xfffdf8);
     this.token.setDepth(110);
     this.highlightRing = scene.add.circle(
       position.x + this.tokenOffset.x,
@@ -41,7 +41,7 @@ export default class Player {
       0xffff00,
       0
     );
-    this.highlightRing.setStrokeStyle(3, 0xffff00);
+    this.highlightRing.setStrokeStyle(3, 0xf0b429);
     this.highlightRing.setVisible(false);
     this.highlightRing.setDepth(109);
     

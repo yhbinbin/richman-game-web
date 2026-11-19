@@ -28,25 +28,27 @@ export default class Board {
     this.propertyByCell = new Map(); // "x,y" -> pathIndex
     this.propertyRects = [];
     this.propertyLevelTexts = [];
+    this.propertyNameTexts = [];
+    this.propertyPriceTexts = [];
     this.propertyOwnerMarkers = [];
     this.priceIndex = 1;
     this.tooltipBox = this.scene.add
-      .rectangle(0, 0, 10, 10, 0x000000, 0.75)
+      .rectangle(0, 0, 10, 10, 0x2c2824, 0.92)
       .setVisible(false)
       .setScrollFactor(0)
-      .setDepth(1000);
+      .setDepth(2200);
     this.tooltipText = this.scene.add.text(0, 0, '', {
       fontFamily: 'Arial',
-      fontSize: '12px',
-      color: '#ffffff',
-    }).setScrollFactor(0).setVisible(false).setDepth(1001);
+      fontSize: '13px',
+      color: '#fffdf8',
+    }).setScrollFactor(0).setVisible(false).setDepth(2201);
     this.pathGridSet = new Set();
     this.pathIndexByCell = new Map();
     this.streets = new Map();
     this.hospitalIndex = -1;
     this.hospitalSlots = [];
 
-    this.tileSize = 32;
+    this.tileSize = 38;
     this.origin = { x: scene.scale.width / 2, y: scene.scale.height / 2 };
 
     this.path.forEach((p, i) => {
@@ -117,45 +119,46 @@ export default class Board {
   }
 
   render() {
-    this.renderGrid();
+    this.renderBackdrop();
     this.renderPropertyCells();
     this.tiles.forEach((tile, index) => {
       const pos = this.positions[index];
-      const color = this.getTileColor(tile.type);
+      const color = this.getTileColor(tile);
       const rect = this.scene.add
-        .rectangle(pos.x, pos.y, this.tileSize - 4, this.tileSize - 4, color)
-        .setStrokeStyle(2, 0x333333);
+        .rectangle(pos.x, pos.y, this.tileSize - 6, this.tileSize - 6, color)
+        .setStrokeStyle(2, 0x6a5f52);
       rect.setInteractive({ useHandCursor: true });
       rect.on('pointerover', () => this.showTooltip(tile.name || tile.type));
       rect.on('pointerout', () => this.hideTooltip());
 
-      const emoji = this.getTileEmoji(tile);
-      if (emoji) {
-        this.scene.add.text(pos.x, pos.y, emoji, {
+      const label = this.getTileLabel(tile);
+      if (label) {
+        this.scene.add.text(pos.x, pos.y, label, {
           fontFamily: 'Arial',
-          fontSize: '14px',
-          color: '#222',
-        }).setOrigin(0.5, 0.5);
+          fontSize: tile.type === 'road' ? '13px' : '12px',
+          color: '#2c2824',
+          fontStyle: 'bold',
+        }).setOrigin(0.5, 0.5).setDepth(4);
       }
 
       const ownerMarker = this.scene.add.circle(pos.x + 16, pos.y + 16, 6, 0x000000);
       ownerMarker.setVisible(false);
       this.ownerMarkers[index] = ownerMarker;
 
-      const blocker = this.scene.add.text(pos.x - 6, pos.y - 10, '⛔', {
+      const blocker = this.scene.add.text(pos.x, pos.y - this.tileSize * 0.46, '⛔', {
         fontFamily: 'Arial',
-        fontSize: '14px',
+        fontSize: '15px',
         color: '#d64545',
-      });
+      }).setOrigin(0.5);
       blocker.setVisible(false);
       blocker.setDepth(100);
       this.blockerMarkers[index] = blocker;
 
-      const mine = this.scene.add.text(pos.x - 6, pos.y + 2, '💣', {
+      const mine = this.scene.add.text(pos.x, pos.y - this.tileSize * 0.46, '💣', {
         fontFamily: 'Arial',
-        fontSize: '14px',
+        fontSize: '15px',
         color: '#222',
-      });
+      }).setOrigin(0.5);
       mine.setVisible(false);
       mine.setDepth(100);
       this.mineMarkers[index] = mine;
@@ -186,33 +189,85 @@ export default class Board {
     }
   }
 
-  renderGrid() {
-    for (let y = 0; y < this.grid.height; y += 1) {
-      for (let x = 0; x < this.grid.width; x += 1) {
-        const pos = this.gridToWorld(x, y);
-        const cell = this.getCell(x, y);
-        const isPath = this.isPathCell(x, y);
-        const base = cell ? this.getTileColor(cell.type) : 0xf0ece4;
-        const color = isPath ? base : 0xf8f6f1;
-        this.scene.add
-          .rectangle(pos.x, pos.y, this.tileSize - 6, this.tileSize - 6, color)
-          .setStrokeStyle(1, 0xd0ccc5);
-      }
-    }
+  renderBackdrop() {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    const consider = (x, y) => {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    };
+    this.path.forEach((pos) => consider(pos.x, pos.y));
+    this.propertyCells.forEach((pos) => consider(pos.x, pos.y));
+    if (!Number.isFinite(minX)) return;
+    const topLeft = this.gridToWorld(minX, minY);
+    const bottomRight = this.gridToWorld(maxX, maxY);
+    const pad = this.tileSize * 0.9;
+    const gfx = this.scene.add.graphics();
+    gfx.fillStyle(0xe7dccb, 1);
+    gfx.fillRoundedRect(
+      topLeft.x - pad,
+      topLeft.y - pad,
+      bottomRight.x - topLeft.x + pad * 2,
+      bottomRight.y - topLeft.y + pad * 2,
+      22
+    );
+    gfx.lineStyle(2, 0xd2c3ad, 1);
+    gfx.strokeRoundedRect(
+      topLeft.x - pad,
+      topLeft.y - pad,
+      bottomRight.x - topLeft.x + pad * 2,
+      bottomRight.y - topLeft.y + pad * 2,
+      22
+    );
+    this.contentBounds = {
+      x: topLeft.x - pad,
+      y: topLeft.y - pad,
+      width: bottomRight.x - topLeft.x + pad * 2,
+      height: bottomRight.y - topLeft.y + pad * 2,
+    };
+    const center = this.gridToWorld((minX + maxX) / 2, (minY + maxY) / 2);
+    this.scene.add.text(center.x, center.y - 8, '大富翁', {
+      fontFamily: 'Arial',
+      fontSize: '40px',
+      color: '#cbbba4',
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(1);
+    this.scene.add.text(center.x, center.y + 28, '沿道路买地、建造、收租', {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#d4c6b0',
+    }).setOrigin(0.5).setDepth(1);
   }
 
   renderPropertyCells() {
     this.propertyCells.forEach((pos, pathIndex) => {
       const world = this.gridToWorld(pos.x, pos.y);
+      const tile = this.tiles[pathIndex];
       const rect = this.scene.add
-        .rectangle(world.x, world.y, this.tileSize - 8, this.tileSize - 8, 0xb08968)
-        .setStrokeStyle(1, 0x333333);
-      const levelText = this.scene.add.text(world.x - 6, world.y - 6, '', {
+        .rectangle(world.x, world.y, this.tileSize - 8, this.tileSize - 8, this.plotColor(tile.streetId))
+        .setStrokeStyle(2, 0x8c7358);
+      const nameText = this.scene.add.text(world.x, world.y - 4, this.lotLetter(tile), {
         fontFamily: 'Arial',
-        fontSize: '10px',
-        color: '#1a1a1a',
-      });
-      const ownerMarker = this.scene.add.circle(world.x + 10, world.y + 10, 5, 0x000000);
+        fontSize: '13px',
+        color: '#2c2824',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      const priceText = this.scene.add.text(world.x, world.y + 9, `${tile.price}`, {
+        fontFamily: 'Arial',
+        fontSize: '9px',
+        color: '#5c5146',
+      }).setOrigin(0.5);
+      const levelText = this.scene.add.text(world.x, world.y - 2, '', {
+        fontFamily: 'Arial',
+        fontSize: '12px',
+        color: '#2c2824',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      const ownerMarker = this.scene.add.circle(world.x + 12, world.y - 12, 4, 0x000000);
       ownerMarker.setVisible(false);
       rect.setInteractive({ useHandCursor: true });
       rect.on('pointerover', () => {
@@ -224,6 +279,8 @@ export default class Board {
       rect.on('pointerout', () => this.hideTooltip());
       this.propertyRects[pathIndex] = rect;
       this.propertyLevelTexts[pathIndex] = levelText;
+      this.propertyNameTexts[pathIndex] = nameText;
+      this.propertyPriceTexts[pathIndex] = priceText;
       this.propertyOwnerMarkers[pathIndex] = ownerMarker;
     });
   }
@@ -384,6 +441,7 @@ export default class Board {
   }
 
   getWorldBounds() {
+    if (this.contentBounds) return { ...this.contentBounds };
     const widthPx = (this.grid.width - 1) * this.tileSize;
     const heightPx = (this.grid.height - 1) * this.tileSize;
     const startX = this.origin.x - widthPx / 2;
@@ -435,21 +493,53 @@ export default class Board {
   }
 
 
-  getTileColor(type) {
-    if (type === 'start') return 0x82c91e;
-    if (type === 'event') return 0xfaad14;
-    if (type === 'road') return 0x9e9e9e;
-    if (type === 'hospital') return 0xe03131;
-    return 0x74c0fc;
+  streetColor(streetId) {
+    const palette = [
+      0xd8c4a4, 0xe4b7a2, 0xc9d3b4, 0xb7c9d4, 0xe4d09a,
+      0xd3c2d6, 0xc5d5cc, 0xe3c3b2, 0xd2d3c0, 0xdcc7ae, 0xc5cfc6,
+    ];
+    const index = Math.max(0, (Number(streetId) || 1) - 1) % palette.length;
+    return palette[index];
   }
 
-  getTileEmoji(tile) {
-    if (tile.type === 'start') return '🏁';
-    if (tile.type === 'hospital') return '🏥';
-    if (tile.type === 'shop') return '🛒';
+  plotColor(streetId) {
+    return this.streetColor(streetId);
+  }
+
+  roadColor(streetId) {
+    const color = this.streetColor(streetId);
+    const r = Math.max(0, ((color >> 16) & 255) - 28);
+    const g = Math.max(0, ((color >> 8) & 255) - 24);
+    const b = Math.max(0, (color & 255) - 18);
+    return (r << 16) + (g << 8) + b;
+  }
+
+  getTileColor(tile) {
+    const type = typeof tile === 'string' ? tile : tile.type;
+    if (type === 'event') return 0xf0d48a;
+    if (type === 'road') return this.roadColor(tile.streetId);
+    if (type === 'hospital') return 0xe7b4b0;
+    if (type === 'shop') return 0xb9cbe0;
+    if (type === 'gain_points') return 0xb7d7cc;
+    if (type === 'start') return 0xc9d7a4;
+    return 0xd9d3c8;
+  }
+
+  lotLetter(tile) {
+    const name = tile.name || '';
+    return name.slice(-1);
+  }
+
+  getTileLabel(tile) {
+    if (tile.type === 'hospital') return '医院';
+    if (tile.type === 'shop') return '商店';
     if (tile.type === 'gain_points') return `+${tile.amount || 10}`;
-    if (tile.type === 'event') return '❓';
-    if (tile.type === 'road') return '🛣️';
+    if (tile.type === 'event') {
+      if (tile.name === '随机事件') return '事件';
+      return (tile.name || '事件').slice(0, 2);
+    }
+    if (tile.type === 'road') return this.lotLetter(tile);
+    if (tile.type === 'start') return '起点';
     return '';
   }
 
@@ -521,22 +611,16 @@ export default class Board {
        }
     }
 
+    const tile = this.tiles[index];
+    const nameText = this.propertyNameTexts[index];
+    if (nameText) nameText.setVisible(!(level > 0));
+    text.setColor('#2c2824');
+    text.setText(displayStr);
     if (!player) {
-      rect.setFillStyle(0xb08968);
-      text.setText(displayStr);
-      text.setColor('#ffffff');
+      rect.setFillStyle(this.plotColor(tile && tile.streetId));
       return;
     }
-
-    rect.setFillStyle(player.color, 0.2);
-    
-    if (buildingType === 'store') {
-       text.setColor('#FFA500'); // Orange for Store
-    } else {
-       text.setColor('#1a1a1a'); // Default dark color
-    }
-    
-    text.setText(displayStr);
+    rect.setFillStyle(player.color, 0.72);
   }
 
   placeBlocker(index) {

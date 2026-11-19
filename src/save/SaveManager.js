@@ -1,4 +1,5 @@
-// 对局快照、校验与本地槽位。版本变更时需同步提升 SAVE_VERSION。
+// 对局快照、校验与本地槽位。
+// 只在不兼容的结构变化时提升 SAVE_VERSION。新增字段请写入 OPTIONAL_*，并为旧档提供默认值。
 export const SAVE_ID = 'richman-game';
 export const SAVE_VERSION = 1;
 export const SLOT_COUNT = 3;
@@ -20,6 +21,21 @@ export const CARD_CATALOG = {
 };
 
 const BUILDING_TYPES = new Set(['house', 'store', 'park']);
+
+// 旧档可以缺少这些字段。以后新增玩家或对局字段时，在这里补默认值，不要把它们改成必填。
+export const OPTIONAL_PLAYER_FIELDS = {
+  points: 0,
+  hospitalTurns: 0,
+  direction: 1,
+  stayNextTurn: false,
+  remoteDice: false,
+  startAssets: 100000,
+};
+
+export const OPTIONAL_GAME_FIELDS = {
+  turnsThisDay: 0,
+  diceFace: 1,
+};
 
 export const SAVE_MESSAGES = {
   invalid: '存档无效或已损坏',
@@ -161,6 +177,137 @@ export function captureState(engine) {
   };
 }
 
+function cloneDefault(value) {
+  if (Array.isArray(value)) return value.slice();
+  if (isPlainObject(value)) return { ...value };
+  return value;
+}
+
+function normalizeCard(card) {
+  if (!isPlainObject(card) || typeof card.type !== 'string') return null;
+  const type = card.type.trim();
+  if (!type || type.length > 32) return null;
+  if (Object.prototype.hasOwnProperty.call(CARD_CATALOG, type)) {
+    return { type, name: CARD_CATALOG[type] };
+  }
+  const rawName = typeof card.name === 'string' ? card.name.trim() : '';
+  return { type, name: (rawName || type).slice(0, 20) };
+}
+
+function normalizePlayers(list) {
+  if (!Array.isArray(list) || list.length !== 4) return fail(SAVE_MESSAGES.players);
+  const players = [];
+  for (const raw of list) {
+    if (!isPlainObject(raw)) return fail(SAVE_MESSAGES.players);
+    const player = {
+      money: raw.money,
+      position: raw.position,
+    };
+    Object.entries(OPTIONAL_PLAYER_FIELDS).forEach(([key, fallback]) => {
+      player[key] = raw[key] === undefined ? cloneDefault(fallback) : raw[key];
+    });
+    if (raw.inventory === undefined) {
+      player.inventory = [];
+    } else if (!Array.isArray(raw.inventory)) {
+      return fail(SAVE_MESSAGES.players);
+    } else {
+      const cards = [];
+      for (const card of raw.inventory) {
+        const normalized = normalizeCard(card);
+        if (!normalized) return fail(SAVE_MESSAGES.players);
+        cards.push(normalized);
+      }
+      player.inventory = cards;
+    }
+    if (raw.isBankrupt === undefined) {
+      player.isBankrupt = typeof player.money === 'number' && player.money < 0;
+    } else {
+      player.isBankrupt = raw.isBankrupt;
+    }
+    players.push(player);
+  }
+  return { ok: true, players };
+}
+
+function normalizeProperties(list, roadIndices) {
+  const source = list === undefined ? [] : list;
+  if (!Array.isArray(source)) return fail(SAVE_MESSAGES.properties);
+  const roads = new Set(roadIndices);
+  const byIndex = new Map();
+  for (const prop of source) {
+    if (!isPlainObject(prop) || !isSafeInteger(prop.index)) return fail(SAVE_MESSAGES.properties);
+    if (!roads.has(prop.index)) continue;
+    if (byIndex.has(prop.index)) return fail(SAVE_MESSAGES.properties);
+    const declaredType = prop.buildingType === undefined ? null : prop.buildingType;
+    const known = declaredType === null || BUILDING_TYPES.has(declaredType);
+    let buildingType = known ? declaredType : null;
+    let level = prop.level;
+    if (!known) {
+      level = isSafeInteger(level) ? Math.min(5, Math.max(0, level)) : 0;
+    } else if (level === undefined) {
+      level = buildingType === 'store' || buildingType === 'park' ? 1 : 0;
+    }
+    byIndex.set(prop.index, {
+      index: prop.index,
+      ownerIndex: prop.ownerIndex === undefined ? null : prop.ownerIndex,
+      level,
+      buildingType,
+    });
+  }
+  return {
+    ok: true,
+    properties: roadIndices.map((index) => byIndex.get(index) || {
+      index,
+      ownerIndex: null,
+      level: 0,
+      buildingType: null,
+    }),
+  };
+}
+
+function normalizeGame(raw, players) {
+  if (!isPlainObject(raw)) return fail(SAVE_MESSAGES.turn);
+  if (!isPlainObject(raw.gameDate)) return fail(SAVE_MESSAGES.economy);
+  const bankrupt = [];
+  players.forEach((player, index) => {
+    if (player.isBankrupt) bankrupt.push(index);
+  });
+  let bankruptcyOrder;
+  if (raw.bankruptcyOrder === undefined) bankruptcyOrder = bankrupt.slice();
+  else if (!Array.isArray(raw.bankruptcyOrder)) return fail(SAVE_MESSAGES.turn);
+  else bankruptcyOrder = raw.bankruptcyOrder.slice();
+  const alive = players.length - bankrupt.length;
+  const game = {
+    gameDate: {
+      y: raw.gameDate.y,
+      m: raw.gameDate.m,
+      d: raw.gameDate.d,
+    },
+    priceIndex: raw.priceIndex,
+    targetPriceIndex: raw.targetPriceIndex === undefined ? raw.priceIndex : raw.targetPriceIndex,
+    currentPlayerIndex: raw.currentPlayerIndex,
+    bankruptcyOrder,
+    gameOver: raw.gameOver === undefined ? alive <= 1 : raw.gameOver,
+  };
+  Object.entries(OPTIONAL_GAME_FIELDS).forEach(([key, fallback]) => {
+    if (game[key] !== undefined) return;
+    game[key] = raw[key] === undefined ? cloneDefault(fallback) : raw[key];
+  });
+  return { ok: true, game };
+}
+
+function normalizeIndexList(value) {
+  if (value === undefined) return { ok: true, list: [] };
+  if (!Array.isArray(value)) return fail(SAVE_MESSAGES.hazards);
+  return { ok: true, list: value.slice() };
+}
+
+function acceptedVersion(version) {
+  if (version === undefined) return 1;
+  if (!Number.isInteger(version) || version < 1 || version > SAVE_VERSION) return null;
+  return version;
+}
+
 function isValidLevel(buildingType, level) {
   if (!isSafeInteger(level) || level < 0) return false;
   if (buildingType === 'store') return level >= 1 && level <= 3;
@@ -195,9 +342,12 @@ function validatePlayers(players, pathLength) {
     }
     if (!Array.isArray(player.inventory) || player.inventory.length > 8) return fail(SAVE_MESSAGES.players);
     for (const card of player.inventory) {
-      if (!isPlainObject(card)) return fail(SAVE_MESSAGES.players);
-      if (!Object.prototype.hasOwnProperty.call(CARD_CATALOG, card.type)) return fail(SAVE_MESSAGES.players);
-      if (card.name !== CARD_CATALOG[card.type]) return fail(SAVE_MESSAGES.players);
+      if (!isPlainObject(card) || typeof card.type !== 'string' || typeof card.name !== 'string') {
+        return fail(SAVE_MESSAGES.players);
+      }
+      if (Object.prototype.hasOwnProperty.call(CARD_CATALOG, card.type) && card.name !== CARD_CATALOG[card.type]) {
+        return fail(SAVE_MESSAGES.players);
+      }
     }
   }
   return null;
@@ -308,18 +458,24 @@ function validateGame(game, players) {
 }
 
 function clonePlayers(players) {
-  return players.map((player) => ({
-    money: player.money,
-    points: player.points,
-    position: player.position,
-    inventory: player.inventory.map((card) => ({ type: card.type, name: card.name })),
-    hospitalTurns: player.hospitalTurns,
-    isBankrupt: player.isBankrupt,
-    direction: player.direction,
-    stayNextTurn: player.stayNextTurn,
-    startAssets: player.startAssets,
-    remoteDice: player.remoteDice,
-  }));
+  return players.map((player) => {
+    const copy = {
+      money: player.money,
+      points: player.points,
+      position: player.position,
+      inventory: player.inventory.map((card) => ({ type: card.type, name: card.name })),
+      hospitalTurns: player.hospitalTurns,
+      isBankrupt: player.isBankrupt,
+      direction: player.direction,
+      stayNextTurn: player.stayNextTurn,
+      startAssets: player.startAssets,
+      remoteDice: player.remoteDice,
+    };
+    Object.keys(OPTIONAL_PLAYER_FIELDS).forEach((key) => {
+      if (player[key] !== undefined) copy[key] = player[key];
+    });
+    return copy;
+  });
 }
 
 function cloneProperties(properties) {
@@ -336,8 +492,7 @@ export function validateSnapshot(raw, context) {
     return fail(SAVE_MESSAGES.invalid);
   }
   if (raw.id !== SAVE_ID) return fail(SAVE_MESSAGES.invalid);
-  if (raw.version !== SAVE_VERSION) return fail(SAVE_MESSAGES.version);
-  if (typeof raw.savedAt !== 'string' || raw.savedAt.length > 40) return fail(SAVE_MESSAGES.invalid);
+  if (acceptedVersion(raw.version) === null) return fail(SAVE_MESSAGES.version);
   if (!isPlainObject(raw.board)) return fail(SAVE_MESSAGES.board);
   const expected = context.fingerprint;
   const board = raw.board;
@@ -353,45 +508,49 @@ export function validateSnapshot(raw, context) {
     return fail(SAVE_MESSAGES.invalid);
   }
 
-  const playerResult = validatePlayers(raw.players, expected.pathLength);
-  if (playerResult) return playerResult;
-  const propertyResult = validateProperties(raw.properties, context.roadIndices, raw.players);
-  if (propertyResult) return propertyResult;
-  const hazardResult = validateHazards(raw.blockers, raw.mines, expected.pathLength, raw.players);
+  const playerResult = normalizePlayers(raw.players);
+  if (!playerResult.ok) return playerResult;
+  const playerCheck = validatePlayers(playerResult.players, expected.pathLength);
+  if (playerCheck) return playerCheck;
+
+  const propertyResult = normalizeProperties(raw.properties, context.roadIndices);
+  if (!propertyResult.ok) return propertyResult;
+  const propertyCheck = validateProperties(propertyResult.properties, context.roadIndices, playerResult.players);
+  if (propertyCheck) return propertyCheck;
+
+  const blockerResult = normalizeIndexList(raw.blockers);
+  if (!blockerResult.ok) return blockerResult;
+  const mineResult = normalizeIndexList(raw.mines);
+  if (!mineResult.ok) return mineResult;
+  const hazardResult = validateHazards(blockerResult.list, mineResult.list, expected.pathLength, playerResult.players);
   if (hazardResult) return hazardResult;
-  const gameResult = validateGame(raw.game, raw.players);
-  if (gameResult) return gameResult;
+
+  const gameResult = normalizeGame(raw.game, playerResult.players);
+  if (!gameResult.ok) return gameResult;
+  const gameCheck = validateGame(gameResult.game, playerResult.players);
+  if (gameCheck) return gameCheck;
+
+  const savedAt = typeof raw.savedAt === 'string' && raw.savedAt.length > 0 && raw.savedAt.length <= 40
+    ? raw.savedAt
+    : new Date().toISOString();
 
   return {
     ok: true,
     snapshot: {
       id: SAVE_ID,
       version: SAVE_VERSION,
-      savedAt: raw.savedAt,
+      savedAt,
       board: {
         width: board.width,
         height: board.height,
         pathLength: board.pathLength,
         pathHash: board.pathHash,
       },
-      game: {
-        gameOver: raw.game.gameOver,
-        gameDate: {
-          y: raw.game.gameDate.y,
-          m: raw.game.gameDate.m,
-          d: raw.game.gameDate.d,
-        },
-        priceIndex: raw.game.priceIndex,
-        targetPriceIndex: raw.game.targetPriceIndex,
-        turnsThisDay: raw.game.turnsThisDay,
-        currentPlayerIndex: raw.game.currentPlayerIndex,
-        bankruptcyOrder: raw.game.bankruptcyOrder.slice(),
-        diceFace: raw.game.diceFace === undefined ? 1 : raw.game.diceFace,
-      },
-      players: clonePlayers(raw.players),
-      properties: cloneProperties(raw.properties),
-      blockers: raw.blockers.slice(),
-      mines: raw.mines.slice(),
+      game: gameResult.game,
+      players: clonePlayers(playerResult.players),
+      properties: cloneProperties(propertyResult.properties),
+      blockers: blockerResult.list.slice(),
+      mines: mineResult.list.slice(),
     },
   };
 }
@@ -409,6 +568,9 @@ function writeSnapshot(engine, snapshot) {
     player.stayNextTurn = saved.stayNextTurn;
     player.startAssets = saved.startAssets;
     player.remoteDice = saved.remoteDice;
+    Object.keys(OPTIONAL_PLAYER_FIELDS).forEach((key) => {
+      if (saved[key] !== undefined) player[key] = saved[key];
+    });
     if (typeof player.resetTokenStyle === 'function') player.resetTokenStyle();
     const position = engine.board.getTilePosition(saved.position);
     if (typeof player.placeAt === 'function') player.placeAt(engine, position);
@@ -447,8 +609,11 @@ function writeSnapshot(engine, snapshot) {
   engine.priceIndex = game.priceIndex;
   engine.targetPriceIndex = game.targetPriceIndex;
   engine.turnsThisDay = game.turnsThisDay;
-  engine.diceFace = game.diceFace;
-  engine.isRolling = false;
+engine.diceFace = game.diceFace;
+    Object.keys(OPTIONAL_GAME_FIELDS).forEach((key) => {
+      if (game[key] !== undefined) engine[key] = game[key];
+    });
+    engine.isRolling = false;
   engine.modalLock = false;
   engine.bankruptcyOrder = game.bankruptcyOrder.map((index) => engine.players[index]);
   engine.gameDate = new Date(game.gameDate.y, game.gameDate.m - 1, game.gameDate.d);
