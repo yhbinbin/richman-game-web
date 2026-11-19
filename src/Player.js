@@ -95,4 +95,21 @@ export default class Player {
       this.highlightRing.setVisible(false);
     }
   }
+
+  resetTokenStyle() {
+    if (!this.token) return;
+    this.token.setFillStyle(this.color);
+    this.token.setAlpha(1);
+    this.token.setStrokeStyle(1.5, 0xffffff);
+  }
+
+  placeAt(scene, position) {
+    if (!this.token || !position) return;
+    const targets = [this.token, this.highlightRing].filter(Boolean);
+    if (scene && scene.tweens) scene.tweens.killTweensOf(targets);
+    const x = position.x + this.tokenOffset.x;
+    const y = position.y + this.tokenOffset.y;
+    this.token.setPosition(x, y);
+    if (this.highlightRing) this.highlightRing.setPosition(x, y);
+  }
 }

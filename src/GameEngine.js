@@ -7,6 +7,8 @@ import BuildingHandler from './handlers/BuildingHandler.js';
 import EventHandler from './handlers/EventHandler.js';
 import NpcHandler from './handlers/NpcHandler.js';
 import { formatFullDate } from './utils/TimeUtils.js';
+import SavePanel from './save/SavePanel.js';
+import { SAVE_MESSAGES, getLocalStorage, hasAnySlot } from './save/SaveManager.js';
 
 export default class GameEngine extends Phaser.Scene {
   constructor() {
@@ -18,11 +20,14 @@ export default class GameEngine extends Phaser.Scene {
     this.isRolling = false;
     this.gameOver = false;
     this.diceValue = 1;
+    this.diceFace = 1;
     this.bankruptcyOrder = [];
     this.gameDate = new Date();
     this.priceIndex = 1;
     this.targetPriceIndex = 1;
     this.turnsThisDay = 0;
+    this.modalLock = false;
+    this.savePanel = null;
 
     this.cardHandler = new CardHandler(this);
     this.buildingHandler = new BuildingHandler(this);
@@ -35,6 +40,7 @@ export default class GameEngine extends Phaser.Scene {
   }
 
   create() {
+    this.resetMatchState();
     const boardData = this.cache.json.get('board');
     this.board = new Board(this, boardData);
     this.board.render();
@@ -61,6 +67,7 @@ export default class GameEngine extends Phaser.Scene {
     this.turnManager = new TurnManager(this.players);
 
     this.createUI();
+    this.savePanel = new SavePanel(this);
 
     this.giveInitialCards();
     this.renderCardSlots();
@@ -70,8 +77,27 @@ export default class GameEngine extends Phaser.Scene {
     this.centerCameraOnBoard(bounds);
     this.time.delayedCall(0, () => this.centerCameraOnBoard(bounds));
 
+    this.scale.off('resize', this.handleResize, this);
     this.scale.on('resize', this.handleResize, this);
     this.handleResize({ width: this.scale.width, height: this.scale.height });
+    if (hasAnySlot(getLocalStorage())) {
+      this.log('检测到本地存档，可点击「读档」继续');
+    }
+  }
+
+  resetMatchState() {
+    this.isRolling = false;
+    this.gameOver = false;
+    this.diceFace = 1;
+    this.bankruptcyOrder = [];
+    this.gameDate = new Date();
+    this.priceIndex = 1;
+    this.targetPriceIndex = 1;
+    this.turnsThisDay = 0;
+    this.modalLock = false;
+    this.directionArrow = null;
+    this.ui = {};
+    this.savePanel = null;
   }
 
   handleResize(gameSize) {
@@ -117,6 +143,15 @@ export default class GameEngine extends Phaser.Scene {
 
     if (this.ui.queryBtn) {
       this.ui.queryBtn.setPosition(width - 80, cardSlotY);
+    }
+    if (this.ui.saveBtn) {
+      this.ui.saveBtn.setPosition(width - 200, 128);
+    }
+    if (this.ui.loadBtn) {
+      this.ui.loadBtn.setPosition(width - 120, 128);
+    }
+    if (this.savePanel && this.savePanel.isOpen()) {
+      this.savePanel.layout();
     }
 
     const cx = width / 2;
@@ -171,7 +206,7 @@ export default class GameEngine extends Phaser.Scene {
       wordWrap: { width: 360 },
     }).setScrollFactor(0);
 
-    this.ui.dice = this.add.text(620, 16, '骰子 1', {
+    this.ui.dice = this.add.text(620, 16, `骰子 ${this.diceFace || 1}`, {
       fontFamily: 'Arial',
       fontSize: '20px',
       color: '#222',
@@ -213,6 +248,31 @@ export default class GameEngine extends Phaser.Scene {
       .setScrollFactor(0)
       .setVisible(false)
       .on('pointerdown', () => this.restartGame());
+
+    this.ui.saveBtn = this.add
+      .text(1180, 128, '存档', {
+        fontFamily: 'Arial',
+        fontSize: '16px',
+        backgroundColor: '#2b6cb0',
+        color: '#fff',
+        padding: { x: 10, y: 6 },
+      })
+      .setInteractive({ useHandCursor: true })
+      .setScrollFactor(0)
+      .setDepth(1500)
+      .on('pointerdown', () => this.openSavePanel());
+    this.ui.loadBtn = this.add
+      .text(1260, 128, '读档', {
+        fontFamily: 'Arial',
+        fontSize: '16px',
+        backgroundColor: '#38a169',
+        color: '#fff',
+        padding: { x: 10, y: 6 },
+      })
+      .setInteractive({ useHandCursor: true })
+      .setScrollFactor(0)
+      .setDepth(1500)
+      .on('pointerdown', () => this.openSavePanel());
 
     this.ui.choiceBox = this.add
       .rectangle(200, 560, 360, 90, 0xffffff)
@@ -370,6 +430,7 @@ export default class GameEngine extends Phaser.Scene {
   }
 
   async handleRoll() {
+    if (this.savePanel && this.savePanel.isOpen()) return;
     if (this.isRolling || this.gameOver) return;
 
     this.isRolling = true;
@@ -414,6 +475,7 @@ export default class GameEngine extends Phaser.Scene {
 
     if (this.checkBankruptcy()) {
       this.gameOver = true;
+      this.isRolling = false;
       return;
     }
 
@@ -522,7 +584,12 @@ export default class GameEngine extends Phaser.Scene {
 
     const alive = this.players.filter((p) => !p.isBankrupt);
     if (alive.length > 1) return false;
+    this.presentGameOver();
+    return true;
+  }
 
+  presentGameOver() {
+    const alive = this.players.filter((p) => !p.isBankrupt);
     if (alive.length === 1) {
       const winner = alive[0];
       const ranking = [winner, ...this.bankruptcyOrder.slice().reverse()];
@@ -532,9 +599,51 @@ export default class GameEngine extends Phaser.Scene {
     } else {
       this.ui.status.setText('游戏结束：全部破产');
     }
-
     this.ui.restartBtn.setVisible(true);
+  }
+
+  isWorldIdle() {
+    if (this.isRolling || this.modalLock) return false;
+    if (this.ui.choiceBox && this.ui.choiceBox.visible) return false;
     return true;
+  }
+
+  openSavePanel() {
+    if (!this.isWorldIdle()) {
+      this.log(SAVE_MESSAGES.busy);
+      return;
+    }
+    this.closeSummary();
+    if (this.savePanel) this.savePanel.open();
+  }
+
+  onSnapshotApplied() {
+    if (this.ui.dice) this.ui.dice.setText(`骰子 ${this.diceFace}`);
+    this.hideChoiceUI();
+    this.closeSummary();
+    if (this.board) this.board.disablePlacement();
+    document.querySelectorAll('.richman-overlay').forEach((node) => node.remove());
+    this.updateUI();
+    if (this.gameOver) this.presentGameOver();
+    else if (this.ui.restartBtn) this.ui.restartBtn.setVisible(false);
+    if (this.ui.notice) {
+      this.ui.notice.setText('读档成功').setVisible(true);
+      this.time.delayedCall(1200, () => {
+        if (this.ui.notice) this.ui.notice.setVisible(false);
+      });
+    }
+    if (!this.gameOver) this.log('已读取存档');
+  }
+
+  hideChoiceUI() {
+    if (!this.ui.choiceBox) return;
+    this.ui.choiceBox.setVisible(false);
+    this.ui.choiceText.setVisible(false);
+    this.ui.buyBtn.setVisible(false);
+    this.ui.skipBtn.setVisible(false);
+    if (this.ui.diceButtons) {
+      this.ui.diceButtons.forEach((btn) => btn.setVisible(false));
+    }
   }
 
   updateUI() {
@@ -733,6 +842,7 @@ export default class GameEngine extends Phaser.Scene {
 
   useCard(slotIndex) {
     const current = this.turnManager.getCurrentPlayer();
+    if (this.savePanel && this.savePanel.isOpen()) return;
     if (this.isRolling || this.gameOver) return;
     const card = current.inventory[slotIndex];
     if (!card) return;
@@ -1014,6 +1124,7 @@ export default class GameEngine extends Phaser.Scene {
     return new Promise((resolve) => {
       // Create DOM overlay for Blueprint
       const container = document.createElement('div');
+      container.className = 'richman-overlay';
       container.style.position = 'absolute';
       container.style.top = '0';
       container.style.left = '0';
@@ -1155,6 +1266,7 @@ export default class GameEngine extends Phaser.Scene {
   }
 
   promptChoosePlayer(currentPlayer, cardName, callback, targetPlayers = null) {
+    this.modalLock = true;
     const cx = this.cameras.main.width / 2;
     const cy = this.cameras.main.height / 2;
     
@@ -1175,6 +1287,7 @@ export default class GameEngine extends Phaser.Scene {
     uiElements.push(overlay, title);
     
     const cleanup = () => {
+      this.modalLock = false;
       this.input.off('pointerdown', rightClickListener);
       uiElements.forEach(el => el.destroy());
     };
@@ -1335,6 +1448,7 @@ export default class GameEngine extends Phaser.Scene {
           if (ticks >= maxTicks) {
             timer.remove(false);
             const finalValue = this.turnManager.rollDice();
+            this.diceFace = finalValue;
             this.ui.dice.setText(`骰子 ${finalValue}`);
             resolve(finalValue);
           }
